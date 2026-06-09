@@ -61,6 +61,8 @@ function Index() {
 
   // Step 3
   const [connected, setConnected] = useState(false);
+  const [connectionState, setConnectionState] = useState("Waiting to initialize session…");
+  const [scanEtaSeconds, setScanEtaSeconds] = useState<number | null>(null);
 
   // Step 5
   const [result, setResult] = useState<CampaignResult | null>(null);
@@ -76,6 +78,8 @@ function Index() {
     setManualText("");
     setMessages([{ id: crypto.randomUUID(), type: "text", text: "" }]);
     setConnected(false);
+    setConnectionState("Waiting to initialize session…");
+    setScanEtaSeconds(null);
     setResult(null);
   };
 
@@ -170,7 +174,11 @@ function Index() {
           <StepConnect
             sessionId={sessionId}
             connected={connected}
-            onConnected={() => setConnected(true)}
+            onConnectionChange={setConnected}
+            connectionState={connectionState}
+            onConnectionStateChange={setConnectionState}
+            scanEtaSeconds={scanEtaSeconds}
+            onScanEtaChange={setScanEtaSeconds}
             onBack={() => setStep(2)}
             onStart={goToSending}
           />

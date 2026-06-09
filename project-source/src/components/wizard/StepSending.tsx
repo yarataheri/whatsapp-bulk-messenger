@@ -11,43 +11,64 @@ interface Props {
 }
 
 export function StepSending({ sessionId, messages, total, onComplete }: Props) {
-  const [sent, setSent] = useState<string[]>([]);
-  const [failed, setFailed] = useState<{ number: string; reason: string }[]>([]);
-  const [notWa, setNotWa] = useState<string[]>([]);
+  const [sent, setSent] = useState(0);
+  const [failed, setFailed] = useState(0);
+  const [notWa, setNotWa] = useState(0);
   const [log, setLog] = useState<LogEntry[]>([]);
   const idRef = useRef(0);
   const logBoxRef = useRef<HTMLDivElement>(null);
   const completedRef = useRef(false);
 
-  const processed = sent.length + failed.length + notWa.length;
+  const processed = sent + failed + notWa;
   const pct = total ? Math.round((processed / total) * 100) : 0;
 
   useEffect(() => {
-    const ts = () => new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    const ts = () =>
+      new Date().toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      });
+
     const close = sse(sessionId, "progress", {
-      sent: (d: { number: string }) => {
-        setSent((s) => [...s, d.number]);
-        setLog((l) => [...l, { id: ++idRef.current, status: "sent", number: d.number, ts: ts() }]);
+      // backend fires "progress" with running totals
+      progress: (d: { sent: number; failed: number; notWa: number; total: number }) => {
+        setSent(d.sent ?? 0);
+        setFailed(d.failed ?? 0);
+        setNotWa(d.notWa ?? 0);
       },
-      not_wa: (d: { number: string; reason: string }) => {
-        setNotWa((s) => [...s, d.number]);
-        setLog((l) => [...l, { id: ++idRef.current, status: "not_wa", number: d.number, reason: d.reason, ts: ts() }]);
-      },
-      failed: (d: { number: string; reason: string }) => {
-        setFailed((s) => [...s, d]);
-        setLog((l) => [...l, { id: ++idRef.current, status: "failed", number: d.number, reason: d.reason, ts: ts() }]);
-      },
-      done: (d: CampaignResult) => {
+      // backend fires "done" with { success[], failed[], notWa[] }
+      done: (d: { success: string[]; failed: { number: string; error: string }[]; notWa: string[] }) => {
         if (completedRef.current) return;
         completedRef.current = true;
-        onComplete(d);
+        // map to CampaignResult shape the rest of the UI expects
+        const result: CampaignResult = {
+          total,
+          sent: d.success ?? [],
+          notWa: d.notWa ?? [],
+          failed: (d.failed ?? []).map((f) => ({ number: f.number, reason: f.error })),
+        };
+        onComplete(result);
+      },
+      error: (d: { message: string }) => {
+        setLog((l) => [
+          ...l,
+          {
+            id: ++idRef.current,
+            status: "failed",
+            number: "—",
+            reason: d.message,
+            ts: ts(),
+          },
+        ]);
       },
     });
     return close;
-  }, [sessionId, onComplete]);
+  }, [sessionId, onComplete, total]);
 
   useEffect(() => {
-    if (logBoxRef.current) logBoxRef.current.scrollTop = logBoxRef.current.scrollHeight;
+    if (logBoxRef.current)
+      logBoxRef.current.scrollTop = logBoxRef.current.scrollHeight;
   }, [log]);
 
   return (
@@ -61,8 +82,8 @@ export function StepSending({ sessionId, messages, total, onComplete }: Props) {
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
             <Stat label="Recipients" value={total} tint="bg-muted" />
-            <Stat label="Sent" value={sent.length} tint="bg-success-bg" textTint="text-success" />
-            <Stat label="Failed" value={failed.length + notWa.length} tint="bg-destructive-bg" textTint="text-destructive" />
+            <Stat label="Sent" value={sent} tint="bg-success-bg" textTint="text-success" />
+            <Stat label="Failed" value={failed + notWa} tint="bg-destructive-bg" textTint="text-destructive" />
             <Stat label="Remaining" value={Math.max(total - processed, 0)} tint="bg-muted" />
           </div>
 
@@ -72,18 +93,30 @@ export function StepSending({ sessionId, messages, total, onComplete }: Props) {
               <span className="text-accent-info font-mono">{pct}%</span>
             </div>
             <div className="h-3 w-full bg-muted rounded-full overflow-hidden">
-              <div className="h-full bg-accent-info rounded-full transition-all duration-300" style={{ width: `${pct}%` }} />
+              <div
+                className="h-full bg-accent-info rounded-full transition-all duration-300"
+                style={{ width: `${pct}%` }}
+              />
             </div>
           </div>
 
           <div className="border border-border rounded-xl overflow-hidden">
             <div className="bg-muted/60 px-4 py-2 border-b border-border flex justify-between items-center">
-              <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Live activity log</span>
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
+                Live activity log
+              </span>
               <span className="text-[10px] text-muted-foreground">Auto-scrolling</span>
             </div>
-            <div ref={logBoxRef} className="h-72 overflow-y-auto p-4 font-mono text-sm space-y-2 bg-background">
-              {log.length === 0 && <p className="text-muted-foreground italic text-xs">Warming up…</p>}
-              {log.map((e) => <LogLine key={e.id} entry={e} />)}
+            <div
+              ref={logBoxRef}
+              className="h-72 overflow-y-auto p-4 font-mono text-sm space-y-2 bg-background"
+            >
+              {log.length === 0 && (
+                <p className="text-muted-foreground italic text-xs">Warming up…</p>
+              )}
+              {log.map((e) => (
+                <LogLine key={e.id} entry={e} />
+              ))}
             </div>
           </div>
         </div>
@@ -91,11 +124,15 @@ export function StepSending({ sessionId, messages, total, onComplete }: Props) {
 
       <aside className="space-y-6">
         <div className="bg-card rounded-2xl border border-border p-6 shadow-sm">
-          <h3 className="text-sm font-bold text-muted-foreground uppercase mb-4 tracking-wider">Message Sequence</h3>
+          <h3 className="text-sm font-bold text-muted-foreground uppercase mb-4 tracking-wider">
+            Message Sequence
+          </h3>
           <ol className="space-y-3">
             {messages.map((m, i) => (
               <li key={m.id} className="flex gap-3">
-                <span className="shrink-0 size-7 rounded-lg bg-accent text-accent-foreground font-bold text-xs grid place-items-center">{i + 1}</span>
+                <span className="shrink-0 size-7 rounded-lg bg-accent text-accent-foreground font-bold text-xs grid place-items-center">
+                  {i + 1}
+                </span>
                 <div className="min-w-0">
                   <p className="text-xs font-bold capitalize">{m.type}</p>
                   <p className="text-xs text-muted-foreground truncate italic">
@@ -118,10 +155,22 @@ export function StepSending({ sessionId, messages, total, onComplete }: Props) {
   );
 }
 
-function Stat({ label, value, tint, textTint }: { label: string; value: number; tint: string; textTint?: string }) {
+function Stat({
+  label,
+  value,
+  tint,
+  textTint,
+}: {
+  label: string;
+  value: number;
+  tint: string;
+  textTint?: string;
+}) {
   return (
     <div className={`p-4 rounded-xl ${tint}`}>
-      <p className={`text-xs font-semibold uppercase mb-1 ${textTint ?? "text-muted-foreground"}`}>{label}</p>
+      <p className={`text-xs font-semibold uppercase mb-1 ${textTint ?? "text-muted-foreground"}`}>
+        {label}
+      </p>
       <p className={`text-2xl font-bold font-mono ${textTint ?? "text-foreground"}`}>{value}</p>
     </div>
   );
@@ -133,7 +182,9 @@ function LogLine({ entry }: { entry: LogEntry }) {
       <div className="flex gap-3">
         <span className="text-success">✓</span>
         <span className="text-muted-foreground">[{entry.ts}]</span>
-        <span className="text-foreground">Sent to <span className="font-bold">{entry.number}</span></span>
+        <span className="text-foreground">
+          Sent to <span className="font-bold">{entry.number}</span>
+        </span>
       </div>
     );
   if (entry.status === "not_wa")
@@ -141,14 +192,18 @@ function LogLine({ entry }: { entry: LogEntry }) {
       <div className="flex gap-3">
         <span className="text-warning font-bold">!</span>
         <span className="text-muted-foreground">[{entry.ts}]</span>
-        <span className="text-warning">Not on WhatsApp <span className="font-bold">{entry.number}</span></span>
+        <span className="text-warning">
+          Not on WhatsApp <span className="font-bold">{entry.number}</span>
+        </span>
       </div>
     );
   return (
     <div className="flex gap-3">
       <span className="text-destructive font-bold">✗</span>
       <span className="text-muted-foreground">[{entry.ts}]</span>
-      <span className="text-destructive">{entry.reason}: <span className="font-bold">{entry.number}</span></span>
+      <span className="text-destructive">
+        {entry.reason}: <span className="font-bold">{entry.number}</span>
+      </span>
     </div>
   );
 }

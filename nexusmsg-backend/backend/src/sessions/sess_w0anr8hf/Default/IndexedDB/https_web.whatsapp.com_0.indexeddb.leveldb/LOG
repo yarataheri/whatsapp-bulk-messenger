@@ -1,0 +1,6 @@
+2026/06/05-14:38:46.115 40f8 Creating DB D:\New-automation\nexusmsg-backend\backend\src\sessions\sess_w0anr8hf\Default\IndexedDB\https_web.whatsapp.com_0.indexeddb.leveldb since it was missing.
+2026/06/05-14:38:46.122 40f8 Reusing MANIFEST D:\New-automation\nexusmsg-backend\backend\src\sessions\sess_w0anr8hf\Default\IndexedDB\https_web.whatsapp.com_0.indexeddb.leveldb/MANIFEST-000001
+2026/06/05-14:39:55.227 46c Level-0 table #5: started
+2026/06/05-14:39:55.233 46c Level-0 table #5: 162321 bytes OK
+2026/06/05-14:39:55.237 46c Delete type=0 #3
+2026/06/05-14:39:55.237 40f8 Manual compaction at level-0 from '\x00\x01\x00\x00\x00' @ 72057594037927935 : 1 .. '\x00\x02\x00\x00\x00' @ 0 : 0; will stop at (end)
